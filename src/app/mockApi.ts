@@ -1,4 +1,4 @@
-import type { FileItem } from "../FileGrid";
+import type { FileItem } from "./types";
 
 export const MOCK_AUTH =
   import.meta.env.VITE_MOCK_AUTH === "1" ||

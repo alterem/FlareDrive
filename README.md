@@ -157,12 +157,26 @@ By default the dev server proxies `/webdav` to `http://localhost:8788`. Run
 the Cloudflare Pages dev server in another terminal:
 
 ```bash
-npx wrangler pages dev build --persist --port 8788
+npx wrangler pages dev build --port 8788
 ```
 
 Or, to iterate on the UI without a backend, copy `.env.development.example`
 to `.env.development` and uncomment `VITE_MOCK_AUTH=1` — the SPA will use an
 in-memory mock store and any non-empty credentials will sign you in.
+
+### Tailing production logs
+
+To stream live logs from a deployed Pages project (useful for debugging
+WebDAV clients):
+
+```bash
+npx wrangler pages deployment tail
+```
+
+You'll be prompted to pick the project; the latest production deployment is
+selected by default. Anything the Functions emit via `console.log` —
+including the 4xx/5xx WebDAV diagnostics — appears in the terminal in real
+time.
 
 ---
 

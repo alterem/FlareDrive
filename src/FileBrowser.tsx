@@ -1,145 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Home, Loader2, NotebookPen } from "lucide-react";
-import FileGrid, { encodeKey, FileItem, isDirectory, ViewMode } from "./FileGrid";
+import { Loader2, NotebookPen } from "lucide-react";
+import FileGrid from "./FileGrid";
+import { basename, encodeKey } from "./app/path";
+import type { FileItem, ViewMode } from "./app/types";
 import MultiSelectToolbar from "./MultiSelectToolbar";
 import UploadDrawer, { UploadFab } from "./UploadDrawer";
 import TextPadDrawer from "./TextPadDrawer";
 import { copyPaste, deleteKey, fetchPath } from "./app/transfer";
 import { useTransferQueue, useUploadEnqueue } from "./app/transferQueue";
 import { sortFiles, type SortState } from "./app/sort";
+import { useCwd } from "./hooks/useCwd";
+import { Centered } from "./components/Centered";
+import { PathBreadcrumb } from "./components/PathBreadcrumb";
+import { DropZone } from "./components/DropZone";
+import { RenameDialog } from "./components/RenameDialog";
+import { ConfirmDeleteDialog } from "./components/ConfirmDeleteDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid h-full place-items-center">{children}</div>
-  );
-}
-
-function PathBreadcrumb({
-  path,
-  onCwdChange,
-}: {
-  path: string;
-  onCwdChange: (newCwd: string) => void;
-}) {
-  const parts = path.replace(/\/$/, "").split("/");
-  return (
-    <nav className="flex items-center gap-1 overflow-x-auto p-2 text-sm">
-      <button
-        type="button"
-        onClick={() => onCwdChange("")}
-        className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <Home className="h-4 w-4" />
-      </button>
-      {parts.map((part, index) => {
-        const isLast = index === parts.length - 1;
-        return (
-          <span key={index} className="flex items-center gap-1">
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            {isLast ? (
-              <span className="font-medium">{part}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  onCwdChange(parts.slice(0, index + 1).join("/") + "/")
-                }
-                className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                {part}
-              </button>
-            )}
-          </span>
-        );
-      })}
-    </nav>
-  );
-}
-
-function DropZone({
-  children,
-  onDrop,
-}: {
-  children: React.ReactNode;
-  onDrop: (files: FileList) => void;
-}) {
-  const [dragging, setDragging] = useState(false);
-  return (
-    <div
-      className={cn(
-        "flex-1 overflow-y-auto bg-background transition",
-        dragging && "ring-2 ring-inset ring-brand brightness-95",
-      )}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop(e.dataTransfer.files);
-        setDragging(false);
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function cwdToPath(cwd: string): string {
-  if (!cwd) return "/";
-  return "/" + cwd.split("/").map(encodeURIComponent).join("/");
-}
-
-function pathToCwd(pathname: string): string {
-  if (!pathname || pathname === "/") return "";
-  const trimmed = pathname.replace(/^\/+/, "");
-  const withSlash = trimmed.endsWith("/") ? trimmed : trimmed + "/";
-  try {
-    return decodeURIComponent(withSlash);
-  } catch {
-    return withSlash;
+function shareKey(key: string) {
+  const url = new URL(`/webdav/${encodeKey(key)}`, window.location.href);
+  if (navigator.share) {
+    navigator.share({ url: url.toString() }).catch(() => {
+      navigator.clipboard?.writeText(url.toString());
+    });
+  } else {
+    navigator.clipboard?.writeText(url.toString());
   }
 }
 
-function useCwd(): [string, (next: string) => void] {
-  const [cwd, setCwdState] = useState(() =>
-    pathToCwd(window.location.pathname),
-  );
-
-  const setCwd = useCallback((next: string) => {
-    setCwdState(next);
-    const newPath = cwdToPath(next);
-    if (newPath !== window.location.pathname) {
-      window.history.pushState(null, "", newPath + window.location.search);
-    }
-  }, []);
-
-  useEffect(() => {
-    const onPopState = () => {
-      setCwdState(pathToCwd(window.location.pathname));
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  return [cwd, setCwd];
+function downloadKey(key: string) {
+  const a = document.createElement("a");
+  a.href = `/webdav/${encodeKey(key)}`;
+  a.download = basename(key);
+  a.click();
 }
 
 function FileBrowser({
@@ -214,6 +107,20 @@ function FileBrowser({
     });
   }, []);
 
+  const performRename = async () => {
+    if (multiSelected?.length !== 1) return;
+    await copyPaste(multiSelected[0], cwd + renameValue, true);
+    setRenameOpen(false);
+    fetchFiles();
+  };
+
+  const performDelete = async () => {
+    if (!confirmDelete) return;
+    for (const key of confirmDelete) await deleteKey(key);
+    setConfirmDelete(null);
+    fetchFiles();
+  };
+
   return (
     <>
       {cwd && <PathBreadcrumb path={cwd} onCwdChange={setCwd} />}
@@ -233,7 +140,7 @@ function FileBrowser({
           <FileGrid
             files={filteredFiles}
             viewMode={viewMode}
-            onCwdChange={(newCwd: string) => setCwd(newCwd)}
+            onCwdChange={setCwd}
             multiSelected={multiSelected}
             onMultiSelect={handleMultiSelect}
             emptyMessage={
@@ -280,114 +187,34 @@ function FileBrowser({
         multiSelected={multiSelected}
         onClose={() => setMultiSelected(null)}
         onDownload={() => {
-          if (multiSelected?.length !== 1) return;
-          const a = document.createElement("a");
-          a.href = `/webdav/${encodeKey(multiSelected[0])}`;
-          a.download = multiSelected[0].split("/").pop()!;
-          a.click();
+          if (multiSelected?.length === 1) downloadKey(multiSelected[0]);
         }}
         onRename={() => {
           if (multiSelected?.length !== 1) return;
-          const current =
-            multiSelected[0].replace(/\/$/, "").split("/").pop() ?? "";
-          setRenameValue(current);
+          setRenameValue(basename(multiSelected[0]));
           setRenameOpen(true);
         }}
         onDelete={() => {
-          if (!multiSelected?.length) return;
-          setConfirmDelete(multiSelected);
+          if (multiSelected?.length) setConfirmDelete(multiSelected);
         }}
         onShare={() => {
-          if (multiSelected?.length !== 1) return;
-          const url = new URL(
-            `/webdav/${encodeKey(multiSelected[0])}`,
-            window.location.href,
-          );
-          if (navigator.share) {
-            navigator.share({ url: url.toString() }).catch(() => {
-              navigator.clipboard?.writeText(url.toString());
-            });
-          } else {
-            navigator.clipboard?.writeText(url.toString());
-          }
+          if (multiSelected?.length === 1) shareKey(multiSelected[0]);
         }}
       />
 
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Rename</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="rename">New name</Label>
-            <Input
-              id="rename"
-              autoFocus
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === "Enter" && multiSelected?.length === 1) {
-                  await copyPaste(multiSelected[0], cwd + renameValue, true);
-                  setRenameOpen(false);
-                  fetchFiles();
-                }
-              }}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                if (multiSelected?.length !== 1) return;
-                await copyPaste(multiSelected[0], cwd + renameValue, true);
-                setRenameOpen(false);
-                fetchFiles();
-              }}
-            >
-              Rename
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RenameDialog
+        open={renameOpen}
+        value={renameValue}
+        onValueChange={setRenameValue}
+        onClose={() => setRenameOpen(false)}
+        onSubmit={performRename}
+      />
 
-      <Dialog
-        open={confirmDelete !== null}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete permanently?</DialogTitle>
-            <DialogDescription>
-              The following item(s) will be removed and cannot be restored.
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="max-h-40 overflow-y-auto rounded-md bg-muted/40 p-2 text-sm">
-            {confirmDelete?.map((key) => (
-              <li key={key} className="truncate">
-                {key.replace(/\/$/, "").split("/").pop()}
-              </li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                if (!confirmDelete) return;
-                for (const key of confirmDelete) await deleteKey(key);
-                setConfirmDelete(null);
-                fetchFiles();
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDeleteDialog
+        keys={confirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={performDelete}
+      />
     </>
   );
 }

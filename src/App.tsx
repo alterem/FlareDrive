@@ -12,7 +12,7 @@ import {
   type AuthCredentials,
 } from "@/lib/auth";
 import { UnauthorizedError } from "./app/transfer";
-import type { ViewMode } from "./FileGrid";
+import type { ViewMode } from "./app/types";
 import { DEFAULT_SORT, type SortState } from "./app/sort";
 
 const VIEW_MODE_KEY = "flaredrive.viewMode";

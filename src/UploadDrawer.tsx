@@ -1,10 +1,9 @@
-import React, { forwardRef, useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Camera,
   FolderPlus,
   Image as ImageIcon,
   Upload as UploadIcon,
-  Plus,
 } from "lucide-react";
 import {
   Sheet,
@@ -12,19 +11,31 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { createFolder } from "./app/transfer";
 import { useUploadEnqueue } from "./app/transferQueue";
-import { cn } from "@/lib/utils";
+import { UploadFab } from "./components/UploadFab";
+import { CreateFolderDialog } from "./components/CreateFolderDialog";
+
+export { UploadFab };
+
+type UploadKind = "photo" | "image" | "file";
+
+const ACCEPT_BY_KIND: Record<UploadKind, string> = {
+  photo: "image/*",
+  image: "image/*,video/*",
+  file: "*/*",
+};
+
+function pickFiles(kind: UploadKind): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ACCEPT_BY_KIND[kind];
+    if (kind === "photo") input.capture = "environment";
+    input.multiple = true;
+    input.onchange = () => resolve(input.files ? Array.from(input.files) : []);
+    input.click();
+  });
+}
 
 function IconCaptionButton({
   icon,
@@ -47,25 +58,6 @@ function IconCaptionButton({
   );
 }
 
-export const UploadFab = forwardRef<
-  HTMLButtonElement,
-  { onClick: () => void; className?: string }
->(function ({ onClick, className }, ref) {
-  return (
-    <button
-      ref={ref}
-      aria-label="Upload"
-      onClick={onClick}
-      className={cn(
-        "fixed right-4 bottom-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-lg transition hover:opacity-90",
-        className,
-      )}
-    >
-      <Plus className="h-7 w-7" />
-    </button>
-  );
-});
-
 function UploadDrawer({
   open,
   setOpen,
@@ -79,33 +71,14 @@ function UploadDrawer({
 }) {
   const uploadEnqueue = useUploadEnqueue();
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const [folderName, setFolderName] = useState("");
 
   const handleUpload = useCallback(
-    (action: string) => () => {
-      const input = document.createElement("input");
-      input.type = "file";
-      switch (action) {
-        case "photo":
-          input.accept = "image/*";
-          input.capture = "environment";
-          break;
-        case "image":
-          input.accept = "image/*,video/*";
-          break;
-        case "file":
-          input.accept = "*/*";
-          break;
-      }
-      input.multiple = true;
-      input.onchange = async () => {
-        if (!input.files) return;
-        const files = Array.from(input.files);
-        uploadEnqueue(...files.map((file) => ({ file, basedir: cwd })));
-        setOpen(false);
-        onUpload();
-      };
-      input.click();
+    (kind: UploadKind) => async () => {
+      const files = await pickFiles(kind);
+      if (files.length === 0) return;
+      uploadEnqueue(...files.map((file) => ({ file, basedir: cwd })));
+      setOpen(false);
+      onUpload();
     },
     [cwd, onUpload, setOpen, uploadEnqueue],
   );
@@ -142,7 +115,6 @@ function UploadDrawer({
               caption="New folder"
               onClick={() => {
                 setOpen(false);
-                setFolderName("");
                 setFolderDialogOpen(true);
               }}
             />
@@ -150,48 +122,12 @@ function UploadDrawer({
         </SheetContent>
       </Sheet>
 
-      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Create folder</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="folder-name">Folder name</Label>
-            <Input
-              id="folder-name"
-              autoFocus
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === "Enter" && folderName) {
-                  await createFolder(cwd, folderName);
-                  setFolderDialogOpen(false);
-                  onUpload();
-                }
-              }}
-              placeholder="New folder"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setFolderDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={!folderName.trim()}
-              onClick={async () => {
-                await createFolder(cwd, folderName.trim());
-                setFolderDialogOpen(false);
-                onUpload();
-              }}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateFolderDialog
+        open={folderDialogOpen}
+        setOpen={setFolderDialogOpen}
+        cwd={cwd}
+        onCreated={onUpload}
+      />
     </>
   );
 }

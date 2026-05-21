@@ -1,4 +1,5 @@
-import { FileItem, isDirectory } from "../FileGrid";
+import { basename, isDirectory } from "./path";
+import type { FileItem } from "./types";
 
 export type SortKey = "name" | "size" | "modified";
 export type SortDirection = "asc" | "desc";
@@ -9,10 +10,6 @@ export interface SortState {
 }
 
 export const DEFAULT_SORT: SortState = { key: "name", direction: "asc" };
-
-function filenameOf(file: FileItem) {
-  return file.key.replace(/\/$/, "").split("/").pop()?.toLowerCase() ?? "";
-}
 
 export function sortFiles(files: FileItem[], { key, direction }: SortState) {
   const dir = direction === "asc" ? 1 : -1;
@@ -34,7 +31,10 @@ export function sortFiles(files: FileItem[], { key, direction }: SortState) {
       }
       case "name":
       default:
-        return collator.compare(filenameOf(a), filenameOf(b)) * dir;
+        return collator.compare(
+          basename(a.key).toLowerCase(),
+          basename(b.key).toLowerCase(),
+        ) * dir;
     }
   });
 }
