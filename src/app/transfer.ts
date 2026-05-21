@@ -131,23 +131,25 @@ export async function generateThumbnail(file: File) {
     );
     drawCover(ctx, video, video.videoWidth, video.videoHeight);
   } else if (file.type === "application/pdf") {
-    const pdfjsLib = await import(
-      // @ts-ignore
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"
-    );
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+    const [pdfjsLib, workerUrlModule] = await Promise.all([
+      import("pdfjs-dist"),
+      import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+    ]);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrlModule.default;
     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
     const page = await pdf.getPage(1);
     const { width, height } = page.getViewport({ scale: 1 });
     const scale = THUMBNAIL_SIZE / Math.max(width, height);
     const viewport = page.getViewport({ scale });
-    const renderContext = { canvasContext: ctx, viewport };
-    await page.render(renderContext).promise;
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
   }
 
   const thumbnailBlob = await new Promise<Blob>((resolve) =>
-    canvas.toBlob((blob) => resolve(blob!)),
+    canvas.toBlob(
+      (blob) => resolve(blob!),
+      "image/webp",
+      0.85,
+    ),
   );
 
   return thumbnailBlob;

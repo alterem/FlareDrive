@@ -1,4 +1,6 @@
 const STORAGE_KEY = "flaredrive.auth";
+const COOKIE_NAME = "flaredrive_auth";
+const COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
 let inMemoryToken: string | null = null;
 
@@ -7,12 +9,29 @@ export type AuthCredentials = {
   password: string;
 };
 
+function setAuthCookie(token: string) {
+  if (typeof document === "undefined") return;
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie =
+    `${COOKIE_NAME}=${encodeURIComponent(token)}; ` +
+    `Path=/; Max-Age=${COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+}
+
+function clearAuthCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export function loadStoredAuth(): string | null {
-  if (inMemoryToken) return inMemoryToken;
+  if (inMemoryToken) {
+    setAuthCookie(inMemoryToken);
+    return inMemoryToken;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       inMemoryToken = raw;
+      setAuthCookie(raw);
       return raw;
     }
   } catch {
@@ -29,6 +48,7 @@ export function saveAuth({ username, password }: AuthCredentials) {
   } catch {
     // ignore
   }
+  setAuthCookie(token);
   return token;
 }
 
@@ -39,6 +59,7 @@ export function clearAuth() {
   } catch {
     // ignore
   }
+  clearAuthCookie();
 }
 
 export function authHeader(): Record<string, string> {
