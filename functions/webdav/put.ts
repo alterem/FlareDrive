@@ -35,7 +35,7 @@ export async function handleRequestPut({
   }
 
   if (request.url.endsWith("/")) {
-    console.log(`[webdav] PUT 405: url ends with "/" (${request.url})`);
+    console.log(`[webdav]   reason: PUT target ends with "/" — use MKCOL`);
     return new Response("Method Not Allowed", { status: 405 });
   }
 

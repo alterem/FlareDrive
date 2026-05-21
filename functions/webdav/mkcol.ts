@@ -13,9 +13,7 @@ export async function handleRequestMkcol({
     if (resource.httpMetadata?.contentType === "application/x-directory") {
       return new Response(null, { status: 201 });
     }
-    console.log(
-      `[webdav] MKCOL 405: existing non-directory at ${path}`,
-    );
+    console.log(`[webdav]   reason: MKCOL target exists as a file at "${path}"`);
     return new Response("Method Not Allowed", { status: 405 });
   }
 

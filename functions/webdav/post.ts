@@ -57,7 +57,7 @@ export const handleRequestPost = async function ({
   }
 
   console.log(
-    `[webdav] POST 405: no "uploads" or "uploadId" param (${request.url})`,
+    `[webdav]   reason: POST without ?uploads or ?uploadId (multipart only)`,
   );
   return new Response("Method not allowed", { status: 405 });
 };
