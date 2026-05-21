@@ -29,6 +29,7 @@ Steps:
    - Select `Docusaurus` framework preset
    - Set `WEBDAV_USERNAME` and `WEBDAV_PASSWORD`
    - (Optional) Set `WEBDAV_PUBLIC_READ` to `1` to enable public read
+   - (Optional) Set `WEBDAV_PREFIX_ONLY` to `1` to require the `/webdav/` prefix
 2. After initial deployment, bind your R2 bucket to `BUCKET` variable
 3. Retry deployment in `Deployments` page to apply the changes
 4. (Optional) Add a custom domain
@@ -45,6 +46,10 @@ npx wrangler pages deploy build
 You can use any client (such as [Cx File Explorer](https://play.google.com/store/apps/details?id=com.cxinventor.file.explorer), [BD File Manager](https://play.google.com/store/apps/details?id=com.liuzho.file.explorer))
 that supports the WebDAV protocol to access your files.
 Fill the endpoint URL as `https://<your-domain.com>/webdav` and use the username and password you set.
+
+By default, WebDAV is also reachable at the root path (e.g. `https://<your-domain.com>/`),
+which lets tools that only accept a hostname (like some browser-extension backup plugins) work without a path prefix.
+Set `WEBDAV_PREFIX_ONLY=1` to restrict WebDAV to the `/webdav/` prefix only.
 
 However, the standard WebDAV protocol does not support large file (≥128MB) uploads due to the limitation of Cloudflare Workers.
 You must upload large files through the web interface which supports chunked uploads.

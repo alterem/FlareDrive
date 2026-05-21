@@ -2,6 +2,7 @@ import { dispatchWebdav, WebdavEnv } from "./webdav/dispatch";
 
 interface RootEnv extends WebdavEnv {
   ASSETS: Fetcher;
+  WEBDAV_PREFIX_ONLY?: string;
 }
 
 function isBrowserNavigation(request: Request) {
@@ -27,6 +28,16 @@ export const onRequest: PagesFunction<RootEnv> = async (context) => {
       headers: request.headers,
     });
     return env.ASSETS.fetch(spaRequest);
+  }
+
+  // Strict-prefix mode: WebDAV is only accessible via /webdav/* and the root
+  // catchall serves nothing to non-browser clients.
+  if (env.WEBDAV_PREFIX_ONLY === "1") {
+    const url = new URL(request.url);
+    console.log(
+      `[webdav] 404 ${request.method} ${url.pathname} (WEBDAV_PREFIX_ONLY=1)`,
+    );
+    return new Response("Not Found", { status: 404 });
   }
 
   const segments = (params.path || []) as string[];
