@@ -85,6 +85,24 @@ export async function fetchPath(path: string) {
 
 const THUMBNAIL_SIZE = 144;
 
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+) {
+  if (!sourceWidth || !sourceHeight) return;
+  const scale = Math.max(
+    THUMBNAIL_SIZE / sourceWidth,
+    THUMBNAIL_SIZE / sourceHeight,
+  );
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const dx = (THUMBNAIL_SIZE - drawWidth) / 2;
+  const dy = (THUMBNAIL_SIZE - drawHeight) / 2;
+  ctx.drawImage(source, dx, dy, drawWidth, drawHeight);
+}
+
 export async function generateThumbnail(file: File) {
   const canvas = document.createElement("canvas");
   canvas.width = THUMBNAIL_SIZE;
@@ -97,7 +115,7 @@ export async function generateThumbnail(file: File) {
       image.onload = () => resolve(image);
       image.src = URL.createObjectURL(file);
     });
-    ctx.drawImage(image, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    drawCover(ctx, image, image.naturalWidth, image.naturalHeight);
   } else if (file.type === "video/mp4") {
     const video = await new Promise<HTMLVideoElement>(
       async (resolve, reject) => {
@@ -111,7 +129,7 @@ export async function generateThumbnail(file: File) {
         resolve(video);
       },
     );
-    ctx.drawImage(video, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    drawCover(ctx, video, video.videoWidth, video.videoHeight);
   } else if (file.type === "application/pdf") {
     const pdfjsLib = await import(
       // @ts-ignore
