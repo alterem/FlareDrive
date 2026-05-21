@@ -4,17 +4,20 @@ function arrayBufferToHex(arrayBuffer: ArrayBuffer) {
     .join("");
 }
 
-async function hmacSHA256(secret: ArrayBuffer, message: string | ArrayBuffer) {
-  if (typeof message === "string") message = new TextEncoder().encode(message);
+async function hmacSHA256(
+  secret: BufferSource,
+  message: string | BufferSource,
+) {
+  const data: BufferSource =
+    typeof message === "string" ? new TextEncoder().encode(message) : message;
   const key = await crypto.subtle.importKey(
     "raw",
     secret,
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, message);
-  return signature;
+  return crypto.subtle.sign("HMAC", key, data);
 }
 
 export class S3Client {

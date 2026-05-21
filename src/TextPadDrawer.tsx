@@ -1,14 +1,14 @@
-// TextPadDrawer.tsx
-import React, { useState } from "react";
+import { useState } from "react";
 import {
-  Box,
-  Button,
-  Drawer,
-  TextField,
-  Typography,
-  IconButton,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useUploadEnqueue } from "./app/transferQueue";
 
 interface TextPadDrawerProps {
@@ -18,12 +18,12 @@ interface TextPadDrawerProps {
   onUpload: () => void;
 }
 
-const TextPadDrawer: React.FC<TextPadDrawerProps> = ({
+function TextPadDrawer({
   open,
   setOpen,
   cwd,
   onUpload,
-}) => {
+}: TextPadDrawerProps) {
   const [noteText, setNoteText] = useState("");
   const [noteName, setNoteName] = useState("note.txt");
   const uploadEnqueue = useUploadEnqueue();
@@ -32,51 +32,45 @@ const TextPadDrawer: React.FC<TextPadDrawerProps> = ({
     const fileBlob = new Blob([noteText], { type: "text/plain" });
     const file = new File([fileBlob], noteName, { type: "text/plain" });
     uploadEnqueue({ file, basedir: cwd });
-    onUpload(); // Refresh file list after upload
-    setOpen(false); // Close drawer
-    setNoteText(""); // Reset
+    onUpload();
+    setOpen(false);
+    setNoteText("");
     setNoteName("note.txt");
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={() => setOpen(false)}>
-      <Box sx={{ width: 400, padding: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-          <Typography variant="h6">TextPad</Typography>
-          <IconButton onClick={() => setOpen(false)}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <TextField
-          label="File Name"
-          value={noteName}
-          onChange={(e) => setNoteName(e.target.value)}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
-
-        <TextField
-          label="Write your note..."
-          multiline
-          rows={15}
-          variant="outlined"
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          fullWidth
-        />
-
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent side="right" className="flex w-full flex-col gap-4 sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>TextPad</SheetTitle>
+        </SheetHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="note-name">File name</Label>
+          <Input
+            id="note-name"
+            value={noteName}
+            onChange={(e) => setNoteName(e.target.value)}
+          />
+        </div>
+        <div className="grid flex-1 gap-2">
+          <Label htmlFor="note-text">Note</Label>
+          <Textarea
+            id="note-text"
+            placeholder="Write your note…"
+            className="flex-1 resize-none"
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+          />
+        </div>
         <Button
-          variant="contained"
-          sx={{ mt: 2 }}
           onClick={handleSaveNote}
-          disabled={!noteText.trim()}
+          disabled={!noteText.trim() || !noteName.trim()}
         >
-          Save & Upload Note
+          Save &amp; upload
         </Button>
-      </Box>
-    </Drawer>
+      </SheetContent>
+    </Sheet>
   );
-};
+}
 
 export default TextPadDrawer;

@@ -2,11 +2,47 @@ import pLimit from "p-limit";
 
 import { encodeKey, FileItem } from "../FileGrid";
 import { TransferTask } from "./transferQueue";
+import { authHeader } from "@/lib/auth";
+import { MOCK_AUTH, mockFetchPath } from "./mockApi";
 
 const WEBDAV_ENDPOINT = "/webdav/";
 
+export class UnauthorizedError extends Error {
+  constructor(message = "Unauthorized") {
+    super(message);
+    this.name = "UnauthorizedError";
+  }
+}
+
+function mergeAuthHeaders(
+  headers?: HeadersInit,
+): Record<string, string> {
+  const merged: Record<string, string> = { ...authHeader() };
+  if (!headers) return merged;
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      merged[key] = value;
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [k, v] of headers) merged[k] = v;
+  } else {
+    Object.assign(merged, headers);
+  }
+  return merged;
+}
+
+export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const res = await fetch(input, {
+    ...init,
+    headers: mergeAuthHeaders(init.headers),
+  });
+  if (res.status === 401) throw new UnauthorizedError();
+  return res;
+}
+
 export async function fetchPath(path: string) {
-  const res = await fetch(`${WEBDAV_ENDPOINT}${encodeKey(path)}`, {
+  if (MOCK_AUTH) return mockFetchPath(path);
+  const res = await authFetch(`${WEBDAV_ENDPOINT}${encodeKey(path)}`, {
     method: "PROPFIND",
     headers: { Depth: "1" },
   });
@@ -22,8 +58,8 @@ export async function fetchPath(path: string) {
     .filter(
       (response) =>
         decodeURIComponent(
-          response.querySelector("href")?.textContent ?? ""
-        ).slice(WEBDAV_ENDPOINT.length) !== path.replace(/\/$/, "")
+          response.querySelector("href")?.textContent ?? "",
+        ).slice(WEBDAV_ENDPOINT.length) !== path.replace(/\/$/, ""),
     )
     .map((response) => {
       const href = response.querySelector("href")?.textContent;
@@ -34,14 +70,14 @@ export async function fetchPath(path: string) {
         response.querySelector("getlastmodified")?.textContent;
       const thumbnail = response.getElementsByTagNameNS(
         "flaredrive",
-        "thumbnail"
+        "thumbnail",
       )[0]?.textContent;
       return {
         key: decodeURI(href).replace(/^\/webdav\//, ""),
         size: size ? Number(size) : 0,
         uploaded: lastModified!,
         httpMetadata: { contentType: contentType! },
-        customMetadata: { thumbnail },
+        customMetadata: { thumbnail: thumbnail ?? undefined },
       } as FileItem;
     });
   return items;
@@ -53,7 +89,7 @@ export async function generateThumbnail(file: File) {
   const canvas = document.createElement("canvas");
   canvas.width = THUMBNAIL_SIZE;
   canvas.height = THUMBNAIL_SIZE;
-  var ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d")!;
 
   if (file.type.startsWith("image/")) {
     const image = await new Promise<HTMLImageElement>((resolve) => {
@@ -63,7 +99,6 @@ export async function generateThumbnail(file: File) {
     });
     ctx.drawImage(image, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
   } else if (file.type === "video/mp4") {
-    // Generate thumbnail from video
     const video = await new Promise<HTMLVideoElement>(
       async (resolve, reject) => {
         const video = document.createElement("video");
@@ -74,7 +109,7 @@ export async function generateThumbnail(file: File) {
         video.pause();
         video.currentTime = 0;
         resolve(video);
-      }
+      },
     );
     ctx.drawImage(video, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
   } else if (file.type === "application/pdf") {
@@ -87,14 +122,14 @@ export async function generateThumbnail(file: File) {
     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
     const page = await pdf.getPage(1);
     const { width, height } = page.getViewport({ scale: 1 });
-    var scale = THUMBNAIL_SIZE / Math.max(width, height);
+    const scale = THUMBNAIL_SIZE / Math.max(width, height);
     const viewport = page.getViewport({ scale });
     const renderContext = { canvasContext: ctx, viewport };
     await page.render(renderContext).promise;
   }
 
   const thumbnailBlob = await new Promise<Blob>((resolve) =>
-    canvas.toBlob((blob) => resolve(blob!))
+    canvas.toBlob((blob) => resolve(blob!)),
   );
 
   return thumbnailBlob;
@@ -115,35 +150,46 @@ function xhrFetch(
   url: RequestInfo | URL,
   requestInit: RequestInit & {
     onUploadProgress?: (progressEvent: ProgressEvent) => void;
-  }
+  },
 ) {
   return new Promise<Response>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = requestInit.onUploadProgress ?? null;
     xhr.open(
       requestInit.method ?? "GET",
-      url instanceof Request ? url.url : url
+      url instanceof Request ? url.url : (url as string),
     );
-    const headers = new Headers(requestInit.headers);
+    const headers = new Headers(mergeAuthHeaders(requestInit.headers));
     headers.forEach((value, key) => xhr.setRequestHeader(key, value));
     xhr.onload = () => {
-      const headers = xhr
-        .getAllResponseHeaders()
-        .trim()
-        .split("\r\n")
-        .reduce((acc, header) => {
+      const headerLines = xhr.getAllResponseHeaders().trim().split("\r\n");
+      const responseHeaders = headerLines.reduce(
+        (acc, header) => {
           const [key, value] = header.split(": ");
           acc[key] = value;
           return acc;
-        }, {} as Record<string, string>);
-      resolve(new Response(xhr.responseText, { status: xhr.status, headers }));
+        },
+        {} as Record<string, string>,
+      );
+      if (xhr.status === 401) {
+        reject(new UnauthorizedError());
+        return;
+      }
+      resolve(
+        new Response(xhr.responseText, {
+          status: xhr.status,
+          headers: responseHeaders,
+        }),
+      );
     };
     xhr.onerror = reject;
     if (
       requestInit.body instanceof Blob ||
       typeof requestInit.body === "string"
     ) {
-      xhr.send(requestInit.body);
+      xhr.send(requestInit.body as XMLHttpRequestBodyInit);
+    } else {
+      xhr.send();
     }
   });
 }
@@ -157,16 +203,16 @@ export async function multipartUpload(
       loaded: number;
       total: number;
     }) => void;
-  }
+  },
 ) {
-  const headers = options?.headers || {};
+  const headers = { ...(options?.headers || {}) };
   headers["content-type"] = file.type;
 
-  const uploadResponse = await fetch(`/webdav/${encodeKey(key)}?uploads`, {
-    headers,
-    method: "POST",
-  });
-  const { uploadId } = await uploadResponse.json<{ uploadId: string }>();
+  const uploadResponse = await authFetch(
+    `/webdav/${encodeKey(key)}?uploads`,
+    { headers, method: "POST" },
+  );
+  const { uploadId } = (await uploadResponse.json()) as { uploadId: string };
   const totalChunks = Math.ceil(file.size / SIZE_LIMIT);
 
   const limit = pLimit(2);
@@ -207,44 +253,55 @@ export async function multipartUpload(
           .catch(uploadPart);
       const response = await [1, 2].reduce(retryReducer, uploadPart());
       return { partNumber: i, etag: response.headers.get("etag")! };
-    })
+    }),
   );
   const uploadedParts = await Promise.all(promises);
   const completeParams = new URLSearchParams({ uploadId });
-  const response = await fetch(`/webdav/${encodeKey(key)}?${completeParams}`, {
-    method: "POST",
-    body: JSON.stringify({ parts: uploadedParts }),
-  });
+  const response = await authFetch(
+    `/webdav/${encodeKey(key)}?${completeParams}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ parts: uploadedParts }),
+    },
+  );
   if (!response.ok) throw new Error(await response.text());
   return response;
 }
 
 export async function copyPaste(source: string, target: string, move = false) {
+  if (MOCK_AUTH) {
+    await new Promise((r) => setTimeout(r, 150));
+    return;
+  }
   const uploadUrl = `${WEBDAV_ENDPOINT}${encodeKey(source)}`;
   const destinationUrl = new URL(
     `${WEBDAV_ENDPOINT}${encodeKey(target)}`,
-    window.location.href
+    window.location.href,
   );
-  await fetch(uploadUrl, {
+  await authFetch(uploadUrl, {
     method: move ? "MOVE" : "COPY",
     headers: { Destination: destinationUrl.href },
   });
 }
 
-export async function createFolder(cwd: string) {
-  try {
-    const folderName = window.prompt("Folder name");
-    if (!folderName) return;
-    if (folderName.includes("/")) {
-      window.alert("Invalid folder name");
-      return;
-    }
-    const folderKey = `${cwd}${folderName}`;
-    const uploadUrl = `${WEBDAV_ENDPOINT}${encodeKey(folderKey)}`;
-    await fetch(uploadUrl, { method: "MKCOL" });
-  } catch (error) {
-    console.log(`Create folder failed`);
+export async function createFolder(cwd: string, folderName: string) {
+  if (!folderName) return;
+  if (folderName.includes("/")) throw new Error("Invalid folder name");
+  if (MOCK_AUTH) {
+    await new Promise((r) => setTimeout(r, 150));
+    return;
   }
+  const folderKey = `${cwd}${folderName}`;
+  const uploadUrl = `${WEBDAV_ENDPOINT}${encodeKey(folderKey)}`;
+  await authFetch(uploadUrl, { method: "MKCOL" });
+}
+
+export async function deleteKey(key: string) {
+  if (MOCK_AUTH) {
+    await new Promise((r) => setTimeout(r, 150));
+    return;
+  }
+  await authFetch(`/webdav/${encodeKey(key)}`, { method: "DELETE" });
 }
 
 export async function processTransferTask({
@@ -256,7 +313,17 @@ export async function processTransferTask({
 }) {
   const { remoteKey, file } = task;
   if (task.type !== "upload" || !file) throw new Error("Invalid task");
-  let thumbnailDigest = null;
+
+  if (MOCK_AUTH) {
+    const steps = 10;
+    for (let i = 1; i <= steps; i++) {
+      await new Promise((r) => setTimeout(r, 80));
+      onTaskProgress?.({ loaded: (file.size * i) / steps, total: file.size });
+    }
+    return new Response(null, { status: 200 });
+  }
+
+  let thumbnailDigest: string | null = null;
 
   if (
     file.type.startsWith("image/") ||
@@ -269,7 +336,7 @@ export async function processTransferTask({
 
       const thumbnailUploadUrl = `/webdav/_$flaredrive$/thumbnails/${digestHex}.png`;
       try {
-        await fetch(thumbnailUploadUrl, {
+        await authFetch(thumbnailUploadUrl, {
           method: "PUT",
           body: thumbnailBlob,
         });
@@ -282,7 +349,7 @@ export async function processTransferTask({
     }
   }
 
-  const headers: { "fd-thumbnail"?: string } = {};
+  const headers: Record<string, string> = {};
   if (thumbnailDigest) headers["fd-thumbnail"] = thumbnailDigest;
   if (file.size >= SIZE_LIMIT) {
     return await multipartUpload(remoteKey, file, {

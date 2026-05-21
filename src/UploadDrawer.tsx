@@ -1,14 +1,30 @@
-import React, { forwardRef, useCallback, useMemo } from "react";
-
-import { Button, Card, Drawer, Fab, Grid, Typography } from "@mui/material";
+import React, { forwardRef, useCallback, useMemo, useState } from "react";
 import {
-  Camera as CameraIcon,
-  CreateNewFolder as CreateNewFolderIcon,
+  Camera,
+  FolderPlus,
   Image as ImageIcon,
   Upload as UploadIcon,
-} from "@mui/icons-material";
+  Plus,
+} from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { createFolder } from "./app/transfer";
 import { useUploadEnqueue } from "./app/transferQueue";
+import { cn } from "@/lib/utils";
 
 function IconCaptionButton({
   icon,
@@ -20,39 +36,35 @@ function IconCaptionButton({
   onClick?: () => void;
 }) {
   return (
-    <Button
-      color="inherit"
-      sx={{ width: "100%", display: "flex", flexDirection: "column" }}
+    <button
+      type="button"
       onClick={onClick}
+      className="flex w-full flex-col items-center gap-2 rounded-xl border bg-card p-4 text-sm transition hover:bg-accent"
     >
       {icon}
-      <Typography
-        variant="caption"
-        sx={{ textTransform: "none", textWrap: "nowrap" }}
-      >
-        {caption}
-      </Typography>
-    </Button>
+      <span className="text-xs">{caption}</span>
+    </button>
   );
 }
 
-export const UploadFab = forwardRef<HTMLButtonElement, { onClick: () => void }>(
-  function ({ onClick }, ref) {
-    return (
-      <Fab
-        ref={ref}
-        aria-label="Upload"
-        variant="circular"
-        color="primary"
-        size="large"
-        sx={{ position: "fixed", right: 16, bottom: 16, color: "white" }}
-        onClick={onClick}
-      >
-        <UploadIcon fontSize="large" />
-      </Fab>
-    );
-  }
-);
+export const UploadFab = forwardRef<
+  HTMLButtonElement,
+  { onClick: () => void; className?: string }
+>(function ({ onClick, className }, ref) {
+  return (
+    <button
+      ref={ref}
+      aria-label="Upload"
+      onClick={onClick}
+      className={cn(
+        "fixed right-4 bottom-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-lg transition hover:opacity-90",
+        className,
+      )}
+    >
+      <Plus className="h-7 w-7" />
+    </button>
+  );
+});
 
 function UploadDrawer({
   open,
@@ -66,6 +78,8 @@ function UploadDrawer({
   onUpload: () => void;
 }) {
   const uploadEnqueue = useUploadEnqueue();
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
 
   const handleUpload = useCallback(
     (action: string) => () => {
@@ -93,7 +107,7 @@ function UploadDrawer({
       };
       input.click();
     },
-    [cwd, onUpload, setOpen, uploadEnqueue]
+    [cwd, onUpload, setOpen, uploadEnqueue],
   );
 
   const takePhoto = useMemo(() => handleUpload("photo"), [handleUpload]);
@@ -101,49 +115,84 @@ function UploadDrawer({
   const uploadFile = useMemo(() => handleUpload("file"), [handleUpload]);
 
   return (
-    <Drawer
-      anchor="bottom"
-      open={open}
-      onClose={() => setOpen(false)}
-      PaperProps={{ sx: { borderRadius: "16px 16px 0 0" } }}
-    >
-      <Card sx={{ padding: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
+    <>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>Add new</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 grid grid-cols-4 gap-3">
             <IconCaptionButton
-              icon={<CameraIcon fontSize="large" />}
+              icon={<Camera className="h-6 w-6" />}
               caption="Camera"
               onClick={takePhoto}
             />
-          </Grid>
-          <Grid item xs={3}>
             <IconCaptionButton
-              icon={<ImageIcon fontSize="large" />}
+              icon={<ImageIcon className="h-6 w-6" />}
               caption="Image/Video"
               onClick={uploadImage}
             />
-          </Grid>
-          <Grid item xs={3}>
             <IconCaptionButton
-              icon={<UploadIcon fontSize="large" />}
+              icon={<UploadIcon className="h-6 w-6" />}
               caption="Upload"
               onClick={uploadFile}
             />
-          </Grid>
-          <Grid item xs={3}>
             <IconCaptionButton
-              icon={<CreateNewFolderIcon fontSize="large" />}
-              caption="Create Folder"
-              onClick={async () => {
+              icon={<FolderPlus className="h-6 w-6" />}
+              caption="New folder"
+              onClick={() => {
                 setOpen(false);
-                await createFolder(cwd);
-                onUpload();
+                setFolderName("");
+                setFolderDialogOpen(true);
               }}
             />
-          </Grid>
-        </Grid>
-      </Card>
-    </Drawer>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create folder</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="folder-name">Folder name</Label>
+            <Input
+              id="folder-name"
+              autoFocus
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && folderName) {
+                  await createFolder(cwd, folderName);
+                  setFolderDialogOpen(false);
+                  onUpload();
+                }
+              }}
+              placeholder="New folder"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFolderDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!folderName.trim()}
+              onClick={async () => {
+                await createFolder(cwd, folderName.trim());
+                setFolderDialogOpen(false);
+                onUpload();
+              }}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

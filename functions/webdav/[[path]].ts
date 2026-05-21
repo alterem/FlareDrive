@@ -38,6 +38,14 @@ const HANDLERS: Record<
   DELETE: handleRequestDelete,
 };
 
+function unauthorized(useWebDavChallenge: boolean) {
+  const headers: Record<string, string> = {};
+  if (useWebDavChallenge) {
+    headers["WWW-Authenticate"] = `Basic realm="WebDAV"`;
+  }
+  return new Response("Unauthorized", { status: 401, headers });
+}
+
 export const onRequest: PagesFunction<{
   WEBDAV_USERNAME: string;
   WEBDAV_PASSWORD: string;
@@ -55,18 +63,25 @@ export const onRequest: PagesFunction<{
     if (!env.WEBDAV_USERNAME || !env.WEBDAV_PASSWORD)
       return new Response("WebDAV protocol is not enabled", { status: 403 });
 
+    // Only emit a `WWW-Authenticate: Basic` challenge for non-browser
+    // WebDAV clients (curl, Finder, etc.) so they get the standard popup.
+    // Browser requests go through the in-app login UI instead.
+    const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
+    const accept = (request.headers.get("accept") || "").toLowerCase();
+    const looksLikeBrowser =
+      accept.includes("text/html") ||
+      (/mozilla|chrome|safari|firefox|edg\//.test(userAgent) &&
+        !/curl|wget|httpie|webdav|microsoft-webdav|cyberduck|davfs|rclone/.test(
+          userAgent,
+        ));
+
     const auth = request.headers.get("Authorization");
-    if (!auth) {
-      return new Response("Unauthorized", {
-        status: 401,
-        headers: { "WWW-Authenticate": `Basic realm="WebDAV"` },
-      });
-    }
+    if (!auth) return unauthorized(!looksLikeBrowser);
+
     const expectedAuth = `Basic ${btoa(
-      `${env.WEBDAV_USERNAME}:${env.WEBDAV_PASSWORD}`
+      `${env.WEBDAV_USERNAME}:${env.WEBDAV_PASSWORD}`,
     )}`;
-    if (auth !== expectedAuth)
-      return new Response("Unauthorized", { status: 401 });
+    if (auth !== expectedAuth) return unauthorized(!looksLikeBrowser);
   }
 
   const [bucket, path] = parseBucketPath(context);

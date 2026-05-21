@@ -1,11 +1,20 @@
-import React, { useState } from "react";
-import { IconButton, Menu, MenuItem, Slide, Toolbar } from "@mui/material";
+import { useState } from "react";
 import {
-  Close as CloseIcon,
-  Delete as DeleteIcon,
-  Download as DownloadIcon,
-  MoreHoriz as MoreHorizIcon,
-} from "@mui/icons-material";
+  Download,
+  MoreHorizontal,
+  Pencil,
+  Share2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 function MultiSelectToolbar({
   multiSelected,
@@ -22,62 +31,58 @@ function MultiSelectToolbar({
   onDelete: () => void;
   onShare: () => void;
 }) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const visible = multiSelected !== null;
+  const single = multiSelected?.length === 1;
+  const singleFile = single && !multiSelected![0].endsWith("/");
 
   return (
-    <Slide direction="up" in={multiSelected !== null}>
-      <Toolbar
-        sx={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 100,
-          backgroundColor: (theme) => theme.palette.background.paper,
-          borderTop: "1px solid lightgray",
-          justifyContent: "space-evenly",
-        }}
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t bg-background px-2 py-2 shadow-lg transition-transform",
+        visible ? "translate-y-0" : "translate-y-full",
+      )}
+    >
+      <Button variant="ghost" size="icon" onClick={onClose}>
+        <X />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={!singleFile}
+        onClick={onDownload}
       >
-        <IconButton color="primary" onClick={onClose}>
-          <CloseIcon />
-        </IconButton>
-        <IconButton
-          color="primary"
-          disabled={
-            multiSelected?.length !== 1 || multiSelected[0].endsWith("/")
-          }
-          onClick={onDownload}
-        >
-          <DownloadIcon />
-        </IconButton>
-        <IconButton color="primary" onClick={onDelete}>
-          <DeleteIcon />
-        </IconButton>
-        <IconButton
-          color="primary"
-          disabled={
-            multiSelected?.length !== 1 || multiSelected[0].endsWith("/")
-          }
-          onClick={(e) => setAnchorEl(e.currentTarget)}
-        >
-          <MoreHorizIcon />
-        </IconButton>
-        {multiSelected?.length && (
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={() => setAnchorEl(null)}
+        <Download />
+      </Button>
+      <Button variant="ghost" size="icon" onClick={onDelete}>
+        <Trash2 />
+      </Button>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" disabled={!singleFile}>
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => {
+              setMenuOpen(false);
+              onRename();
+            }}
           >
-            {multiSelected.length === 1 && (
-              <React.Fragment>
-                <MenuItem onClick={onRename}>Rename</MenuItem>
-                <MenuItem onClick={onShare}>Share</MenuItem>
-              </React.Fragment>
-            )}
-          </Menu>
-        )}
-      </Toolbar>
-    </Slide>
+            <Pencil /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setMenuOpen(false);
+              onShare();
+            }}
+          >
+            <Share2 /> Share
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

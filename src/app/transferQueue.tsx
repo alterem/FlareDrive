@@ -40,7 +40,7 @@ export function useUploadEnqueue() {
           remoteKey: basedir + file.name,
           loaded: 0,
           total: file.size,
-        } as TransferTask)
+        }) as TransferTask,
     );
     setTransferTasks((tasks) => [...tasks, ...newTasks]);
   };
@@ -48,8 +48,10 @@ export function useUploadEnqueue() {
 
 export function TransferQueueProvider({
   children,
+  onError,
 }: {
   children: React.ReactNode;
+  onError?: (error: Error) => void;
 }) {
   const [transferTasks, setTransferTasks] = useState<TransferTask[]>([]);
   const taskProcessing = useRef<TransferTask | null>(null);
@@ -59,7 +61,7 @@ export function TransferQueueProvider({
     return (tasks: TransferTask[]) => {
       const newTask: TransferTask = { ...currentTask, ...props };
       const newTasks = tasks.map((t) =>
-        t === taskProcessing.current ? newTask : t
+        t === taskProcessing.current ? newTask : t,
       );
       if (currentTask === taskProcessing.current)
         taskProcessing.current = newTask;
@@ -69,7 +71,7 @@ export function TransferQueueProvider({
 
   useEffect(() => {
     const taskToProcess = transferTasks.find(
-      (task) => task.status === "pending"
+      (task) => task.status === "pending",
     );
     if (!taskToProcess || taskProcessing.current) return;
     taskProcessing.current = taskToProcess;
@@ -88,8 +90,10 @@ export function TransferQueueProvider({
       })
       .catch((error) => {
         setTransferTasks(currentTaskUpdater({ status: "failed", error }));
+        taskProcessing.current = null;
+        onError?.(error);
       });
-  }, [transferTasks]);
+  }, [transferTasks, onError]);
 
   return (
     <TransferQueueContext.Provider value={transferTasks}>

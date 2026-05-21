@@ -1,23 +1,16 @@
+import { useMemo, useState } from "react";
 import {
-  CircularProgress,
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
-  List,
-  ListItem,
-  ListItemText,
-  Tab,
-  Tabs,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { useMemo, useState } from "react";
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TransferTask, useTransferQueue } from "./app/transferQueue";
 import { humanReadableSize } from "./app/utils";
-import {
-  CheckCircleOutline as CheckCircleOutlineIcon,
-  ErrorOutline as ErrorOutlineIcon,
-} from "@mui/icons-material";
+import { CheckCircle2, AlertCircle } from "lucide-react";
 
 function ProgressDialog({
   open,
@@ -26,62 +19,73 @@ function ProgressDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<"download" | "upload">("upload");
   const transferQueue: TransferTask[] = useTransferQueue();
 
-  const tasks = useMemo(() => {
-    const taskType = tab === 0 ? "download" : "upload";
-    return Object.values(transferQueue).filter(
-      (task) => task.type === taskType
-    );
-  }, [tab, transferQueue]);
+  const tasks = useMemo(
+    () => transferQueue.filter((task) => task.type === tab),
+    [tab, transferQueue],
+  );
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Progress</DialogTitle>
-      <Tabs
-        value={tab}
-        onChange={(_, newTab) => setTab(newTab)}
-        sx={{ "& .MuiTab-root": { flexBasis: "50%" } }}
-      >
-        <Tab label="Downloads" />
-        <Tab label="Uploads" />
-      </Tabs>
-      {tasks.length === 0 ? (
-        <DialogContent>
-          <Typography textAlign="center" color="text.secondary">
-            No tasks
-          </Typography>
-        </DialogContent>
-      ) : (
-        <DialogContent sx={{ padding: 0 }}>
-          <List>
-            {tasks.map((task) => (
-              <ListItem key={task.name}>
-                <ListItemText
-                  primary={task.name}
-                  secondary={`${humanReadableSize(
-                    task.loaded
-                  )} / ${humanReadableSize(task.total)}`}
-                />
-                {task.status === "failed" ? (
-                  <Tooltip title={task.error.message}>
-                    <ErrorOutlineIcon color="error" />
-                  </Tooltip>
-                ) : task.status === "completed" ? (
-                  <CheckCircleOutlineIcon color="success" />
-                ) : task.status === "in-progress" ? (
-                  <CircularProgress
-                    variant="determinate"
-                    size={24}
-                    value={(task.loaded / task.total) * 100}
-                  />
-                ) : null}
-              </ListItem>
-            ))}
-          </List>
-        </DialogContent>
-      )}
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Progress</DialogTitle>
+        </DialogHeader>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "download" | "upload")}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="upload">Uploads</TabsTrigger>
+            <TabsTrigger value="download">Downloads</TabsTrigger>
+          </TabsList>
+          <TabsContent value={tab} className="mt-4 max-h-[60vh] overflow-y-auto">
+            {tasks.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No tasks
+              </p>
+            ) : (
+              <TooltipProvider delayDuration={150}>
+                <ul className="divide-y rounded-md border">
+                  {tasks.map((task) => (
+                    <li
+                      key={task.remoteKey}
+                      className="flex items-start gap-3 p-3 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{task.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {humanReadableSize(task.loaded)} /{" "}
+                          {humanReadableSize(task.total)}
+                        </div>
+                        {task.status === "in-progress" && (
+                          <Progress
+                            className="mt-2 h-1.5"
+                            value={(task.loaded / Math.max(1, task.total)) * 100}
+                          />
+                        )}
+                      </div>
+                      <div className="pt-0.5">
+                        {task.status === "completed" ? (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        ) : task.status === "failed" ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertCircle className="h-5 w-5 text-red-600" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {task.error?.message ?? "Failed"}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </TooltipProvider>
+            )}
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
     </Dialog>
   );
 }

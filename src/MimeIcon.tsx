@@ -1,33 +1,37 @@
-import AudioFileIcon from "@mui/icons-material/AudioFile";
-import CodeIcon from "@mui/icons-material/Code";
-import FolderIcon from "@mui/icons-material/Folder";
-import FolderZipOutlinedIcon from "@mui/icons-material/FolderZipOutlined";
-import ImageIcon from "@mui/icons-material/Image";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
-import PdfIcon from "@mui/icons-material/PictureAsPdf";
-import VideoFileIcon from "@mui/icons-material/VideoFile";
+import {
+  FileAudio,
+  FileCode,
+  FileImage,
+  FileVideo,
+  FileText,
+  FileArchive,
+  Folder,
+  File as FileIcon,
+} from "lucide-react";
 
-function MimeIcon({ contentType }: { contentType: string }) {
-  const fallbackIcon = <InsertDriveFileOutlinedIcon fontSize="large" />;
-  if (typeof contentType !== "string") return fallbackIcon;
-
-  return contentType.startsWith("image/") ? (
-    <ImageIcon fontSize="large" />
-  ) : contentType.startsWith("audio/") ? (
-    <AudioFileIcon fontSize="large" />
-  ) : contentType.startsWith("video/") ? (
-    <VideoFileIcon fontSize="large" />
-  ) : contentType === "application/pdf" ? (
-    <PdfIcon fontSize="large" />
-  ) : ["application/zip", "application/gzip"].includes(contentType) ? (
-    <FolderZipOutlinedIcon fontSize="large" />
-  ) : contentType.startsWith("text/") ? (
-    <CodeIcon fontSize="large" />
-  ) : contentType === "application/x-directory" ? (
-    <FolderIcon fontSize="large" />
-  ) : (
-    fallbackIcon
-  );
+function MimeIcon({
+  contentType,
+  className = "h-8 w-8 text-muted-foreground",
+}: {
+  contentType: string;
+  className?: string;
+}) {
+  if (typeof contentType !== "string")
+    return <FileIcon className={className} />;
+  if (contentType === "application/x-directory")
+    return <Folder className={`${className} text-brand`} />;
+  if (contentType.startsWith("image/"))
+    return <FileImage className={className} />;
+  if (contentType.startsWith("audio/"))
+    return <FileAudio className={className} />;
+  if (contentType.startsWith("video/"))
+    return <FileVideo className={className} />;
+  if (contentType === "application/pdf")
+    return <FileText className={className} />;
+  if (["application/zip", "application/gzip"].includes(contentType))
+    return <FileArchive className={className} />;
+  if (contentType.startsWith("text/")) return <FileCode className={className} />;
+  return <FileIcon className={className} />;
 }
 
 export default MimeIcon;
